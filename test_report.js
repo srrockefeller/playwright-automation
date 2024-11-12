@@ -72,9 +72,9 @@ let reportContent = `
 			
 			await page.click('//span[contains(text(), "Log in")]'); // Click on Log in
 			await page.waitForLoadState('load');
-			await page.waitForSelector("(//*[@class='ReactVirtualized__Grid__innerScrollContainer'])[2]");
+			await page.waitForSelector('(//*[@class="ReactVirtualized__Grid__innerScrollContainer"])[2]');
 			await page.waitForTimeout(3000);
-			const isLoggedIn = await page.isVisible("(//*[@class='ReactVirtualized__Grid__innerScrollContainer'])[2]");
+			const isLoggedIn = await page.isVisible('(//*[@class="ReactVirtualized__Grid__innerScrollContainer"])[2]');
 			assert.strictEqual(isLoggedIn, true, `The user ${user} didn't log in correctly`);			
 			console.log(`Succesfull login for ${user}`);
 			await page.screenshot({ path: `screenshots/post_login_${user}.jpg` });
@@ -127,8 +127,8 @@ let reportContent = `
 
 	const openCampaignVetting = async (advertiser) => {
 		try {
-			await page.click("//*[@href='/vetting/campaign']");
-			await page.click("//button[contains(text(), 'Create Vetting Request')]");
+			await page.click('//*[@href="/vetting/campaign"]');
+			await page.click('//button[contains(text(), "Create Vetting Request")]');
 			
 			await page.waitForSelector('//*[@id="advertiser-select"]');
 			let isLoaded = await page.isVisible('//*[@id="advertiser-select"]');
@@ -170,10 +170,10 @@ let reportContent = `
 		try {
 			//get timestamp
 			const dateObject = new Date();
-			let date = dateObject.toUTCString();
+			let campaignName = dateObject.toUTCString();
 			
 			//Complete Campaign Details
-			await page.fill('//label[contains(text(), "Campaign Name")]/following-sibling::div/input', date);
+			await page.fill('//label[contains(text(), "Campaign Name")]/following-sibling::div/input', campaignName);
 			await page.fill('//label[contains(text(), "Campaign Details")]/following-sibling::div/textarea', 'Playwright Automation Generated Request');
 			await page.fill('//label[contains(text(), "Campaign URL")]/../div/input', 'https://frequencyads.com/');
 			await page.click('//p[contains(text(), "Dates are flexible")]'); //making dates flexible
@@ -224,12 +224,21 @@ let reportContent = `
 			const ischecked = await page.isVisible('//p[contains(text(), "Automation Show")]/../../../../div/span/span/span[contains(@class, "Mui-checked")]');
 			assert.strictEqual(ischecked, true, "Show not selected");
 			console.log("Show Selected");
+			await page.screenshot({ path: 'screenshots/submitVettingShowSelection.jpg' });
+			//Add to Report
+			reportContent += `
+				<li><h2 class="pass">Show Selected</h2>
+				<div class="screenshot">
+					<img src="submitVettingShowSelection.jpg" alt="Logout" width="1000">
+				</div></li>`;
 			
 			//Add some message
 			await page.fill('//label[contains(text(), "Add Message")]/../div/textarea', "This request was generated automatically with playwright, please handle with care.");
 			
-			//Need to acctually submit. Commenting this while code is in progress
-			//await page.click('//button[contains(text(), "Create Vetting Request")]');
+			//Submit Request
+			await page.click('//button[contains(text(), "Create Vetting Request")]');
+			await page.waitForTimeout(3000);
+			await searchCampaignVetting(campaignName);
 			
 			//Take Screen
 			console.log("Vetting Request Submitted");
@@ -237,11 +246,11 @@ let reportContent = `
 			
 			//Add to Report
 			reportContent += `
-				<li><h2 class="pass">Vetting Request submitted</h2>
+				<li><h2 class="pass">Vetting Request submitted succesfully</h2>
 				<div class="screenshot">
 					<img src="submitVettingPage.jpg" alt="Logout" width="1000">
 				</div></li>`;
-			return date;
+			return campaignName;
 		}catch (error){
 			console.error('There was a problem submitting the Vetting Request', error);
 			
@@ -252,19 +261,76 @@ let reportContent = `
 		}
 	}
 	
-	const reviewCampaignVetting = async (campaignName) => {
+	const reviewCampaignVetting = async (campaignName, approve) => {
 		try {
-			await page.click("//*[@href='/vetting/campaign']");
-			await page.fill('//*[@id="outlined-basic"]', campaignName);
-			await page.waitForTimeout(3000);
+			await searchCampaignVetting(campaignName);				
+			await page.click('//div[@class="ReactVirtualized__Grid _bottomRightGrid"]/div/div/div[1]');
+			await page.waitForSelector('//div[@id="campaign-vetting-details"]');
 			
-			await page.screenshot({ path: 'screenshots/searchVettingRequest.jpg' });			
-			//Add to Report
-			reportContent += `
-				<li><h2 class="pass">Vetting Request available for review</h2>
-				<div class="screenshot">
-					<img src="searchVettingRequest.jpg" alt="Logout" width="1000">
-				</div></li>`;
+			const header = await page.textContent('//h1[@class="campaign-header"]'); //Read the value entered
+			assert.ok(header.includes(campaignName), `Expected: "${campaignName}", but found: "${header}"`);
+			console.log("Campaign succesfully opened");
+			
+			await page.click('//*[@data-testid="ExpandMoreIcon"]');//expand to view details
+			
+			//select all shows
+			await page.click('(//input[@class="PrivateSwitchBase-input css-1m9pwf3"])[1]');
+			await page.click('//*[@id="basic-menu"]/div[3]/ul/li[2]');
+			await page.waitForSelector('//button[contains(text(), "Decline")]');
+			
+			//validate the current status
+			
+			const currentStatus = await page.textContent('//div[@class="ReactVirtualized__Grid__innerScrollContainer"]/div/div[5]/span/span/div/div/span/span'); //Read the value entered
+			assert.strictEqual(currentStatus, "Pending Review", "Status is not in review");
+			
+			//Validate if Accept and Decline buttons are displayed
+			let declineButton = await page.isVisible('//button[contains(text(), "Decline")]');
+			assert.strictEqual(declineButton, true, "Decline button not displayed");
+			let approveButton = await page.isVisible('//button[contains(text(), "Approve")]');
+			assert.strictEqual(approveButton, true, "Accept button not displayed");
+			
+			
+			
+			if (approve === 'yes') {
+				await page.click('//button[contains(text(), "Approve")]'); //commented so it doesn't submit for now
+				//wait for button to be displayed back 
+				await page.waitForTimeout(3000);
+				await page.waitForSelector('//button[contains(text(),"Update Vetting Request")]');
+				const newStatus = await page.textContent('//div[@class="ReactVirtualized__Grid__innerScrollContainer"]/div/div[5]/span/span/div/div/span/span'); //Read the value entered
+				assert.strictEqual(newStatus, "Pending Show Approval", "Status is not Approved");
+				//Take Screen
+				console.log("Vetting Request Approved");
+				await page.screenshot({ path: 'screenshots/approveVetting.jpg' });
+			
+				//Add to Report
+				reportContent += `
+					<li><h2 class="pass">Campaign vetting succesfully Approved</h2>
+					<div class="screenshot">
+						<img src="approveVetting.jpg" alt="Logout" width="1000">
+					</div></li>`;
+			}
+			else {
+				await page.click('//button[contains(text(), "Decline")]');
+				await page.waitForSelector('//label[contains(text(),"Enter any comments you may have")]/../div/textarea[1]');
+				await page.fill('//label[contains(text(),"Enter any comments you may have")]/../div/textarea[1]',"Declining this request because I wanted to and you can do nothing about it");
+				await page.click('//button[contains(text(),"Confirm")]');
+				await page.waitForTimeout(3000);
+				await page.waitForSelector('//button[contains(text(),"Update Vetting Request")]');
+				const newStatus = await page.textContent('//div[@class="ReactVirtualized__Grid__innerScrollContainer"]/div/div[5]/span/span/div/div/span/span'); //Read the value entered
+				assert.strictEqual(newStatus, "Declined", "Status is not Declined");
+				//Take Screen
+				console.log("Vetting Request Declined");
+				await page.screenshot({ path: 'screenshots/declineVetting.jpg' });
+			
+				//Add to Report
+				reportContent += `
+					<li><h2 class="pass">Campaign vetting succesfully Declined</h2>
+					<div class="screenshot">
+						<img src="declineVetting.jpg" alt="Logout" width="1000">
+					</div></li>`;
+			}
+						
+			
 			
 		}catch (error){
 			console.error('There was a problem reviewing the Vetting Request', error);
@@ -275,6 +341,35 @@ let reportContent = `
 				<p>Error: ${error.message}</p></li>`;
 		}
 	}
+	
+	const searchCampaignVetting = async (campaignName) => {
+		try {
+			await page.click('//*[@href="/vetting/campaign"]');
+			await page.waitForSelector('//*[@id="outlined-basic"]');
+			await page.fill('//*[@id="outlined-basic"]', campaignName);
+			await page.waitForTimeout(3000);
+			
+			const valueFound = await page.textContent('//div[@class="ReactVirtualized__Grid _bottomRightGrid"]/div/div/div[3]/span/span/span'); //Read the value entered
+			assert.strictEqual(campaignName, valueFound, `Expected value should be ${campaignName} found instead ${valueFound}`); // Validate the values are not entered
+			await page.screenshot({ path: 'screenshots/searchVettingRequest.jpg' });			
+			//Add to Report
+			reportContent += `
+				<li><h2 class="pass">Vetting Request available</h2>
+				<div class="screenshot">
+					<img src="searchVettingRequest.jpg" alt="Logout" width="1000">
+				</div></li>`;
+			
+		}catch (error){
+			console.error('There was a problem searching the Vetting Request', error);
+			
+			//Add error to report
+			reportContent += `
+				<li><h2 class="fail">Problem searching Vetting Request</h2>
+				<p>Error: ${error.message}</p></li>`;
+		}
+	}
+	
+	
 	
 	////////// TESTS //////////
 	
@@ -289,9 +384,9 @@ let reportContent = `
 	await login('sales');
 	await openCampaignVetting('Frequency');
 	const campaignName = await submitCampaignVetting('activeSale', 'peYes');
-	//await logout();
-	//await login('adops');
-	//await reviewCampaignVetting('Automation');
+	await logout();
+	await login('adops');
+	await reviewCampaignVetting(campaignName, 'no');
   
 	await browser.close();
 
